@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gamelan</title>
+  <style>
+body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start; /* Start content from the top */
+  min-height: 100vh;
+  font-family: Arial, sans-serif;
+  background-color: #f0f0f0;
+  margin: 0;
+  overflow-y: auto; /* Enable vertical scrolling */
+}
+
+h1 {
+  margin-bottom: 20px;
+}
+
+#xylophone-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 20px;
+  height: 180px; /* Retain fixed height for consistent appearance */
+}
+
+.xylophone-key {
+  padding: 5px;
+  margin: 2px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.xylophone-label {
+  font-size: 14px;
+}
+
+.xylophone-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: black;
+  margin-bottom: 1px;
+  margin-top: 1px;
+}
+
+#inputs-container {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin: 20px;
+}
+
+.line-container {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin: 10px 0; /* Add vertical spacing between lines */
+}
+
+.note-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 5px;
+}
+
+.note-container:nth-child(4n) {
+  margin-right: 20px; /* Add extra space every 4th box */
+}
+
+.note-playing {
+  background-color: #c6eff8; /* Color when note is playing */
+  transition: background-color 0.2s ease; /* Smooth transition */
+}
+
+.indicator-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 3px;
+  margin-top: 3px;
+}
+
+.indicator {
+  width: 12px;
+  height: 12px; 
+  border-radius: 50%;
+  margin: 0 2px;
+  cursor: pointer;
+  border: 1px solid black;
+}
+
+.note-input {
+  width: 45px;
+  height: 35px;
+  font-size: 20px;
+  text-align: center;
+}
+
+.note-input:focus {
+  border: 2px solid blue;
+}
+
+
+.high {
+  background-color: #579ff6;
+}
+
+.low {
+  background-color: #579ff6;
+}
+
+#controls-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 20px;
+}
+
+.slider-container {
+  display: flex;
+  align-items: center;
+  margin: 10px;
+}
+
+.slider-label {
+  margin: 0 10px;
+}
+
+#play-button {
+  margin-top: 20px;
+  padding: 10px 20px;
+  font-size: 18px;
+}
+
+  </style>
+</head>
+<body>
+  <h1>Gamelan</h1>
+  <div id="xylophone-container"></div>
+  <div id="controls-container">
+
+  <div class="slider-container">
+  <select id="song-list-select">
+    <option value="">Songs...</option>
+    <!-- Options will be dynamically added from the external file -->
+  </select>
+
+      <select id="tuning-select">
+        <option value="salendro">Salendro</option>
+        <option value="degung">Degung</option>
+        <option value="madenda">Madenda</option>
+      </select>
+    </div>
+
+    <div class="slider-container">
+      <span class="slider-label">Speed</span>
+      <input type="range" id="speed-slider" min="0.5" max="1.5" step="0.01" value="1">
+      <span class="slider-label">Fast</span>
+    </div>
+    <div class="slider-container">
+      <span class="slider-label">Pitch</span>
+      <input type="range" id="pitch-slider" min="-6" max="6" step="1" value="0">
+      <span class="slider-label">High</span>
+    </div>
+    <button id="play-button">Play</button>
+<button id="stop-button">Stop</button>
+
+<div class="slider-container">
+</div>
+  <div id="inputs-container"></div>
+<div id="controls-container">
+  <div>
+    <button id="add-line-button">Add Line</button>
+    <button id="remove-line-button">Remove Line</button>
+  </div>
+</div>
+<div class="slider-container">
+  <button id="export-button">Copy to Clipboard</button>
+
+  <input type="text" id="export-import-input" placeholder="Import code" size="50">
+  <button id="import-button">Import</button>
+</div>
+
+  </div>
+
+  <script>
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+    // Base frequencies mapping for the notes based on tunings
+    const tuningFrequencies = {
+      salendro: {
+        'l5': 146.83, 'l4': 174.61, 'l3': 196.00, 'l2': 233.08, 'l1': 261.63,
+        '5': 293.66, '4': 349.23, '3': 392.00, '2': 466.16, '1': 523.25,
+        'h5': 587.33, 'h4': 698.46, 'h3': 783.99, 'h2': 932.33, 'h1': 1046.50
+      },
+      degung: {
+        'l5': 146.83, 'l4': 155.56, 'l3': 174.61, 'l2': 220.00, 'l1': 233.08,
+        '5': 293.66, '4': 311.13, '3': 349.23, '2': 440.00, '1': 466.16,
+        'h5': 587.33, 'h4': 622.25, 'h3': 698.46, 'h2': 880.00, 'h1': 932.33
+      },
+      madenda: {
+        'l5': 174.61, 'l4': 196.00, 'l3': 207.65, 'l2': 261.63, 'l1': 277.18,
+        '5': 349.23, '4': 392.00, '3': 415.30, '2': 523.25, '1': 554.37,
+        'h5': 698.46, 'h4': 783.99, 'h3': 830.61, 'h2': 1046.50, 'h1': 1108.73
+      }
+    };
+
+    let currentTuning = 'salendro';
+
+    // Calculate frequency adjustment based on pitch slider value
+    function getAdjustedFrequency(frequency, semitoneShift) {
+      return frequency * Math.pow(2, semitoneShift / 12);
+    }
+
+// Create xylophone keys
+const xylophoneContainer = document.getElementById('xylophone-container');
+let xylophoneKeys = [];
+
+// Updated keySequence to match the provided sequence
+const keySequence = [
+  { label: '3', type: 'low' }, { label: '2', type: 'low' }, { label: '1', type: 'low' },
+  { label: '5', type: 'regular' }, { label: '4', type: 'regular' }, { label: '3', type: 'regular' },
+  { label: '2', type: 'regular' }, { label: '1', type: 'regular' },
+  { label: '5', type: 'high' }, { label: '4', type: 'high' }, { label: '3', type: 'high' }
+];
+
+const keyboardMap = "asdfghjkl;'".split('');
+
+
+// Define the maximum and minimum heights for the keys
+const maxHeight = 130; // Maximum height for the lowest key
+const minHeight = 70; // Minimum height for the highest key
+
+function updateXylophone() {
+  // Clear existing keys
+  xylophoneContainer.innerHTML = '';
+  xylophoneKeys = [];
+const keyboardMap = 'asdfghjkl;'.split('');
+
+  // Calculate the height step for each subsequent key
+  const heightStep = (maxHeight - minHeight) / (keySequence.length - 1);
+
+  // Create new keys based on current tuning
+  keySequence.forEach((key, index) => {
+    const keyDiv = document.createElement('div');
+    keyDiv.className = 'xylophone-key';
+    
+    // Calculate and set the height based on the position in the sequence
+    const keyHeight = maxHeight - index * heightStep;
+    keyDiv.style.height = `${keyHeight}px`;
+    keyDiv.style.width = '40px';
+    keyDiv.style.backgroundColor = key.type === 'regular' ? '#ccc' : (key.type === 'low' ? '#b3b3b3' : '#e6e6e6');
+    keyDiv.dataset.note = key.label;
+    keyDiv.dataset.type = key.type;
+    keyDiv.dataset.index = index;
+
+    // Create label and dot based on type
+    const labelDiv = document.createElement('div');
+    labelDiv.className = 'xylophone-label';
+    labelDiv.textContent = key.label;
+
+    if (key.type === 'low') {
+      // Dot below the number for low notes
+      keyDiv.appendChild(labelDiv);
+      const dotDiv = document.createElement('div');
+      dotDiv.className = 'xylophone-dot';
+      dotDiv.style.marginTop = '2px'; // Closer to the label
+      keyDiv.appendChild(dotDiv);
+    } else if (key.type === 'high') {
+      // Dot above the number for high notes
+      const dotDiv = document.createElement('div');
+      dotDiv.className = 'xylophone-dot';
+      dotDiv.style.marginBottom = '2px'; // Closer to the label
+      keyDiv.appendChild(dotDiv);
+      keyDiv.appendChild(labelDiv);
+    } else {
+      // No dot for regular notes
+      keyDiv.appendChild(labelDiv);
+    }
+
+    // Add event listener for visual feedback when a key is played
+    keyDiv.addEventListener('mousedown', () => {
+      keyDiv.style.backgroundColor = '#ADD8E6'; // Highlight color
+    });
+    keyDiv.addEventListener('mouseup', () => {
+      // Revert to original color based on type
+      keyDiv.style.backgroundColor = key.type === 'regular' ? '#ccc' : (key.type === 'low' ? '#b3b3b3' : '#e6e6e6');
+    });
+    keyDiv.addEventListener('mouseleave', () => {
+      // Revert to original color if the mouse leaves before releasing
+      keyDiv.style.backgroundColor = key.type === 'regular' ? '#ccc' : (key.type === 'low' ? '#b3b3b3' : '#e6e6e6');
+    });
+
+    xylophoneContainer.appendChild(keyDiv);
+    xylophoneKeys.push(keyDiv);
+  });
+}
+
+updateXylophone(); // Initial call to set up the xylophone
+
+function highlightKey(keyDiv, highlight = true) {
+  if (highlight) {
+    keyDiv.style.backgroundColor = '#ADD8E6'; // Highlight color
+  } else {
+    const type = keyDiv.dataset.type;
+    // Revert to the original color based on the key type
+    keyDiv.style.backgroundColor = type === 'regular' ? '#ccc' : (type === 'low' ? '#b3b3b3' : '#e6e6e6');
+  }
+}
+
+
+let currentLines = 1; // Start with 1 line
+const maxLines = 4;
+
+function addLine() {
+  if (currentLines < maxLines) {
+    currentLines++;
+    createLine(currentLines - 1); // Add new line at the next index
+  }
+}
+
+
+function createLine(lineIndex) {
+  const inputsContainer = document.getElementById('inputs-container');
+
+  // Create a new container for the line
+  const lineContainer = document.createElement('div');
+  lineContainer.className = 'line-container';
+
+  for (let i = 0; i < 16; i++) {
+    const container = document.createElement('div');
+    container.className = 'note-container';
+
+    const indicatorContainer = document.createElement('div');
+    indicatorContainer.className = 'indicator-container';
+
+    const highIndicator1 = document.createElement('div');
+    highIndicator1.className = 'indicator';
+    highIndicator1.dataset.noteIndex = i + lineIndex * 16;
+    highIndicator1.dataset.position = 'high1';
+    indicatorContainer.appendChild(highIndicator1);
+
+    const highIndicator2 = document.createElement('div');
+    highIndicator2.className = 'indicator';
+    highIndicator2.dataset.noteIndex = i + lineIndex * 16;
+    highIndicator2.dataset.position = 'high2';
+    indicatorContainer.appendChild(highIndicator2);
+
+    container.appendChild(indicatorContainer);
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'note-input';
+    input.id = `note-input-${i + lineIndex * 16}`;
+    container.appendChild(input);
+
+    const indicatorContainerLow = document.createElement('div');
+    indicatorContainerLow.className = 'indicator-container';
+
+    const lowIndicator1 = document.createElement('div');
+    lowIndicator1.className = 'indicator';
+    lowIndicator1.dataset.noteIndex = i + lineIndex * 16;
+    lowIndicator1.dataset.position = 'low1';
+    indicatorContainerLow.appendChild(lowIndicator1);
+
+    const lowIndicator2 = document.createElement('div');
+    lowIndicator2.className = 'indicator';
+    lowIndicator2.dataset.noteIndex = i + lineIndex * 16;
+    lowIndicator2.dataset.position = 'low2';
+    indicatorContainerLow.appendChild(lowIndicator2);
+
+    container.appendChild(indicatorContainerLow);
+
+    lineContainer.appendChild(container);
+  }
+
+  // Append the new line container to the inputs container
+  inputsContainer.appendChild(lineContainer);
+}
+
+function removeLine() {
+  if (currentLines > 1) { // Ensure at least one line is always present
+    const inputsContainer = document.getElementById('inputs-container');
+    inputsContainer.removeChild(inputsContainer.lastChild); // Remove the last line
+    currentLines--;
+  }
+}
+
+
+
+    // Map keyboard keys to xylophone keys
+
+    const noteMap = keySequence.map(key => (key.type === 'low' ? 'l' : key.type === 'high' ? 'h' : '') + key.label);
+
+    // Create input boxes and indicators for notes
+    const inputsContainer = document.getElementById('inputs-container');
+    for (let i = 0; i < 16; i++) {
+      const container = document.createElement('div');
+      container.className = 'note-container';
+      
+      const indicatorContainer = document.createElement('div');
+      indicatorContainer.className = 'indicator-container';
+      
+      // Two sets of indicators for two possible 1/8 notes
+      const highIndicator1 = document.createElement('div');
+      highIndicator1.className = 'indicator';
+      highIndicator1.dataset.noteIndex = i;
+      highIndicator1.dataset.position = 'high1';
+      indicatorContainer.appendChild(highIndicator1);
+      
+      const highIndicator2 = document.createElement('div');
+      highIndicator2.className = 'indicator';
+      highIndicator2.dataset.noteIndex = i;
+      highIndicator2.dataset.position = 'high2';
+      indicatorContainer.appendChild(highIndicator2);
+      
+      container.appendChild(indicatorContainer);
+      
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'note-input';
+      input.id = `note-input-${i}`;
+      container.appendChild(input);
+      
+      const indicatorContainerLow = document.createElement('div');
+      indicatorContainerLow.className = 'indicator-container';
+      
+      const lowIndicator1 = document.createElement('div');
+      lowIndicator1.className = 'indicator';
+      lowIndicator1.dataset.noteIndex = i;
+      lowIndicator1.dataset.position = 'low1';
+      indicatorContainerLow.appendChild(lowIndicator1);
+      
+      const lowIndicator2 = document.createElement('div');
+      lowIndicator2.className = 'indicator';
+      lowIndicator2.dataset.noteIndex = i;
+      lowIndicator2.dataset.position = 'low2';
+      indicatorContainerLow.appendChild(lowIndicator2);
+      
+      container.appendChild(indicatorContainerLow);
+      
+      inputsContainer.appendChild(container);
+    }
+
+    // Toggle indicator state
+    document.addEventListener('click', (event) => {
+      if (event.target.classList.contains('indicator')) {
+        const index = event.target.dataset.noteIndex;
+        const position = event.target.dataset.position;
+        const isHigh = position.startsWith('high');
+        const num = position.endsWith('1') ? '1' : '2';
+        const highIndicator = document.querySelectorAll(`.indicator[data-position="high${num}"]`)[index];
+        const lowIndicator = document.querySelectorAll(`.indicator[data-position="low${num}"]`)[index];
+        
+        if (isHigh) {
+          // Toggle high indicator
+          if (highIndicator.classList.contains('high')) {
+            highIndicator.classList.remove('high');
+          } else {
+            highIndicator.classList.add('high');
+            lowIndicator.classList.remove('low');
+          }
+        } else {
+          // Toggle low indicator
+          if (lowIndicator.classList.contains('low')) {
+            lowIndicator.classList.remove('low');
+          } else {
+            lowIndicator.classList.add('low');
+            highIndicator.classList.remove('high');
+          }
+        }
+      } else if (event.target.classList.contains('xylophone-key')) {
+        // Play xylophone key on click
+        const note = event.target.dataset.note;
+        const type = event.target.dataset.type;
+        playXylophoneKey(note, type);
+      }
+    });
+
+ // Handle keyboard input for xylophone
+    document.addEventListener('keydown', (event) => {
+      const keyIndex = keyboardMap.indexOf(event.key);
+      if (keyIndex >= 0 && keyIndex < xylophoneKeys.length) {
+        const keyDiv = xylophoneKeys[keyIndex];
+        const note = keyDiv.dataset.note;
+        const type = keyDiv.dataset.type;
+        playXylophoneKey(note, type);
+      }
+    });
+     
+    // Handle tuning change
+    document.getElementById('tuning-select').addEventListener('change', (event) => {
+      currentTuning = event.target.value;
+      updateXylophone();
+    });
+
+function playXylophoneKey(note, type) {
+  const pitchShift = parseInt(document.getElementById('pitch-slider').value);
+  const frequencies = tuningFrequencies[currentTuning];
+  const noteKey = (type === 'low' ? 'l' : type === 'high' ? 'h' : '') + note;
+  const frequency = getAdjustedFrequency(frequencies[noteKey], pitchShift);
+
+  // Find the keyDiv based on the note and type
+  const keyDiv = xylophoneKeys.find(key => key.dataset.note === note && key.dataset.type === type);
+  
+  if (keyDiv) {
+    highlightKey(keyDiv, true); // Highlight the key
+    setTimeout(() => highlightKey(keyDiv, false), 200); // Remove highlight after 200ms
+  }
+
+  playTone(frequency, 0.5);
+}
+
+    // Determine the note key based on the input and indicators
+    function getNoteKey(value, index, isSecondNote = false) {
+      const suffix = isSecondNote ? '2' : '1';
+      const highIndicator = document.querySelectorAll(`.indicator[data-position="high${suffix}"]`)[index];
+      const lowIndicator = document.querySelectorAll(`.indicator[data-position="low${suffix}"]`)[index];
+      let noteKey = value;
+
+      if (highIndicator.classList.contains('high')) {
+        noteKey = `h${value}`;
+      } else if (lowIndicator.classList.contains('low')) {
+        noteKey = `l${value}`;
+      }
+
+      return noteKey;
+    }
+
+
+
+
+function playTone(frequency, duration = 0.5, index = null) {
+  if (index !== null) {
+    // Add the note-playing class to the current note container if it's not a rest
+    const noteInput = document.getElementById(`note-input-${index}`);
+    if (frequency) {
+      noteInput.classList.add('note-playing');
+      // Remove the note-playing class after the duration
+      setTimeout(() => {
+        noteInput.classList.remove('note-playing');
+      }, duration * 1000);
+    }
+  }
+
+  if (!frequency) return; // Skip if no frequency is provided (rest)
+
+  const oscillator = audioContext.createOscillator();
+  const gainNode = audioContext.createGain();
+
+  oscillator.connect(gainNode);
+  gainNode.connect(audioContext.destination);
+
+  oscillator.type = 'sine'; // You can change this to 'square', 'sawtooth', or 'triangle'
+  oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+  oscillator.start();
+  gainNode.gain.setValueAtTime(1, audioContext.currentTime);
+  gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration);
+  oscillator.stop(audioContext.currentTime + duration);
+}
+
+
+let cursorPosition = null; // Track the cursor position in the input
+let currentInputElement = null; // Track the focused input element
+
+document.addEventListener('focusin', (event) => {
+  if (event.target.classList.contains('note-input')) {
+    cursorPosition = event.target.selectionStart;
+    currentInputElement = event.target;
+  }
+});
+
+document.addEventListener('focusout', (event) => {
+  if (event.target === currentInputElement) {
+    currentInputElement = null;
+    cursorPosition = null;
+  }
+});
+
+document.addEventListener('keydown', (event) => {
+  const keyIndex = keyboardMap.indexOf(event.key);
+  if (keyIndex >= 0 && keyIndex < xylophoneKeys.length) {
+    const keyDiv = xylophoneKeys[keyIndex];
+    const note = keyDiv.dataset.note;
+    const type = keyDiv.dataset.type;
+    playXylophoneKey(note, type); // This will also handle the highlighting
+  }
+});
+
+
+
+let isPlaying = false; // Track if a song is playing
+let currentPlayTimeouts = []; // Track the timeouts for each scheduled tone
+let currentNoteIndex = 0; // Track the current note being played
+
+document.getElementById('stop-button').addEventListener('click', () => {
+  isPlaying = false;
+  document.getElementById('play-button').disabled = false;
+  currentPlayTimeouts.forEach(clearTimeout);
+  currentPlayTimeouts = [];
+
+  // Set focus to the input element of the currently playing note
+  if (currentNoteIndex >= 0) {
+    const currentInput = document.getElementById(`note-input-${currentNoteIndex}`);
+    if (currentInput) {
+      currentInput.focus();
+      cursorPosition = currentInput.selectionStart;
+    }
+  }
+});
+
+
+// Play button logic
+document.getElementById('play-button').addEventListener('click', () => {
+  if (isPlaying) return; // Prevent multiple plays
+  isPlaying = true;
+  document.getElementById('play-button').disabled = true; // Disable play button
+
+  const speed = parseFloat(document.getElementById('speed-slider').value);
+  const pitchShift = parseInt(document.getElementById('pitch-slider').value);
+  const frequencies = tuningFrequencies[currentTuning];
+  const inputs = document.querySelectorAll('.note-input');
+
+  // Determine starting index
+  let startIndex = 0;
+  for (let i = 0; i < inputs.length; i++) {
+    if (inputs[i] === document.activeElement) {
+      startIndex = i;
+      break;
+    }
+  }
+
+  currentNoteIndex = startIndex;
+  let delay = 0;
+
+  for (let line = 0; line < currentLines; line++) {
+    for (let i = 0; i < 16; i++) {
+      const index = i + line * 16;
+      if (index < startIndex) continue; // Skip until reaching the startIndex
+      const value = document.getElementById(`note-input-${index}`).value.trim().toLowerCase();
+      if (value) {
+        const playNote = (note, duration, index) => {
+          currentNoteIndex = index; // Update current note index
+          const freq = getAdjustedFrequency(frequencies[note], pitchShift);
+          playTone(freq, duration, index);
+        };
+
+        // Determine the notes to play based on the input value
+        if (value.length === 4) {
+          const note1 = getNoteKey(value.slice(0, 2), index, false);
+          const note2 = getNoteKey(value.slice(2), index, true);
+          if (frequencies[note1]) {
+            currentPlayTimeouts.push(setTimeout(() => playNote(note1, 0.25 / speed, index), delay / speed));
+          }
+          if (frequencies[note2]) {
+            currentPlayTimeouts.push(setTimeout(() => playNote(note2, 0.25 / speed, index), (delay + 300) / speed));
+          }
+          delay += 600;
+        } else if (value.length === 3) {
+          const note1 = value[0];
+          const note2 = getNoteKey(value.slice(1), index, true);
+          if (frequencies[note1]) {
+            currentPlayTimeouts.push(setTimeout(() => playNote(note1, 0.25 / speed, index), delay / speed));
+          }
+          if (frequencies[note2]) {
+            currentPlayTimeouts.push(setTimeout(() => playNote(note2, 0.25 / speed, index), (delay + 300) / speed));
+          }
+          delay += 600;
+        } else if (value.length === 2) {
+          if (frequencies[value]) {
+            const noteKey = getNoteKey(value, index, false);
+            currentPlayTimeouts.push(setTimeout(() => playNote(noteKey, 0.5 / speed, index), delay / speed));
+            delay += 600;
+          } else if (frequencies[value[0]] && frequencies[value[1]]) {
+            const note1 = getNoteKey(value[0], index, false);
+            const note2 = getNoteKey(value[1], index, true);
+            currentPlayTimeouts.push(setTimeout(() => playNote(note1, 0.25 / speed, index), delay / speed));
+            currentPlayTimeouts.push(setTimeout(() => playNote(note2, 0.25 / speed, index), (delay + 300) / speed));
+            delay += 600;
+          } else if (value[0] === '-' || value[0] === '0') {
+            const restDuration = 0.25;
+            const noteKey = getNoteKey(value[1], index, true);
+            currentPlayTimeouts.push(setTimeout(() => playTone(null, restDuration / speed, index), delay / speed));
+            if (frequencies[noteKey]) {
+              currentPlayTimeouts.push(setTimeout(() => playNote(noteKey, 0.25 / speed, index), (delay + 300) / speed));
+            }
+            delay += 600;
+          }
+        } else if (value.length === 1) {
+          if (frequencies[value]) {
+            const noteKey = getNoteKey(value, index, false);
+            currentPlayTimeouts.push(setTimeout(() => playNote(noteKey, 0.5 / speed, index), delay / speed));
+            delay += 600;
+          } else if (value === '-' || value === '0') {
+            currentPlayTimeouts.push(setTimeout(() => playTone(null, 0.5 / speed, index), delay / speed));
+            delay += 600;
+          }
+        }
+      } else {
+        delay += 600;
+      }
+    }
+  }
+});
+
+
+
+
+
+
+
+document.getElementById('add-line-button').addEventListener('click', addLine);
+document.getElementById('remove-line-button').addEventListener('click', removeLine);
+
+document.getElementById('tuning-select').addEventListener('change', updateXylophone);
+
+document.getElementById('export-button').addEventListener('click', exportPart);
+document.getElementById('import-button').addEventListener('click', () => {
+  const code = document.getElementById('export-import-input').value.trim();
+  importPart(code);
+});
+
+// Simulated JSON data embedded directly in JavaScript
+  const songList = [
+{name:"Suku Kami",
+tuning:"Salendro",
+code: "salendro,1.32,0,-4,4,4,4,43,2,23,4,-4,4,4,4,43,2,25h,1,-1,1,1,1,15h,1,12,1,-1,1,1,1,15h,1,12,3",
+},   
+{name:"Timang Burung",
+tuning:"Salendro",
+code: "salendro,1.21,0,4,4,l1,5,l1,5,4,,5,4,3,4,5,l1,4,,4,4,l1,5,l1,5,4,,5,4,3,4,5,l1,5,,5,l1,l2,l2,l1,5,l2,5,l1,l2,l2,4,3,l2,l1,,l1,l1,5,3,4,5,l1,5,l1,l2,l2,4,4,5,4,",
+},
+ {
+	name: "Genderewo",
+	tuning: "Madenda",
+	code: "madenda,1,0,55,43,54,3,55,43,54,3,55,43,54,3,54,12,h21h,h32h,12,34,53,4,12,34,53,4,12,34,53,4,23,45,53,35"
+    },{
+      name: "Dikir Puteri",
+      tuning: "Salendro",
+      code: "salendro,1.13,0,4,4,5,54,3,-4,4,,51l,l21l,5,5,51l,l2,l1,"
+    },
+    {
+      name: "Kalanganan",
+      tuning: "Degung",
+      code: "degung,0.91,-2,2,,5,,2,,5,,2,-5,4,3,21,h51,2,"
+    }
+  ];
+
+  function loadSongList() {
+    const songListSelect = document.getElementById('song-list-select');
+    songList.forEach(song => {
+      const option = document.createElement('option');
+      option.value = song.code;
+      option.textContent = `${song.name} (${song.tuning})`;
+      songListSelect.appendChild(option);
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', loadSongList);
+// Handle song selection from the list
+document.getElementById('song-list-select').addEventListener('change', (event) => {
+  const songCode = event.target.value;
+  if (songCode) {
+    importPart(songCode);
+  }
+});
+
+
+function exportPart() {
+  const tuning = document.getElementById('tuning-select').value;
+  const speed = parseFloat(document.getElementById('speed-slider').value);
+  const pitch = parseInt(document.getElementById('pitch-slider').value);
+  const notes = [];
+
+  for (let line = 0; line < currentLines; line++) {
+    for (let i = 0; i < 16; i++) {
+      const index = i + line * 16;
+      const value = document.getElementById(`note-input-${index}`).value.trim().toLowerCase();
+      const highIndicator1 = document.querySelector(`.indicator[data-position="high1"][data-note-index="${index}"]`);
+      const lowIndicator1 = document.querySelector(`.indicator[data-position="low1"][data-note-index="${index}"]`);
+      const highIndicator2 = document.querySelector(`.indicator[data-position="high2"][data-note-index="${index}"]`);
+      const lowIndicator2 = document.querySelector(`.indicator[data-position="low2"][data-note-index="${index}"]`);
+
+      let noteDetail = value;
+
+      if (highIndicator1.classList.contains('high')) noteDetail = 'h' + noteDetail;
+      else if (lowIndicator1.classList.contains('low')) noteDetail = 'l' + noteDetail;
+
+      if (highIndicator2.classList.contains('high')) noteDetail += 'h';
+      else if (lowIndicator2.classList.contains('low')) noteDetail += 'l';
+
+      notes.push(noteDetail);
+    }
+  }
+
+  const code = `${tuning},${speed},${pitch},${notes.join(',')}`;
+  navigator.clipboard.writeText(code).then(() => {
+    alert('Part copied to clipboard!');
+  });
+}
+
+function importPart(code) {
+  const parts = code.split(',');
+  if (parts.length < 4) { // Ensure valid data (tuning, speed, pitch, and at least one note)
+    alert('Invalid code');
+    return;
+  }
+
+  const [tuning, speed, pitch, ...notes] = parts;
+
+  // Calculate the number of lines needed (each line has 16 notes)
+  const requiredLines = Math.ceil(notes.length / 16);
+
+  // Adjust the number of lines to match the imported data
+  while (currentLines < requiredLines) addLine();
+  while (currentLines > requiredLines) removeLine();
+
+  // Set tuning, speed, and pitch
+  document.getElementById('tuning-select').value = tuning;
+  currentTuning = tuning; 
+  document.getElementById('speed-slider').value = parseFloat(speed);
+  document.getElementById('pitch-slider').value = parseInt(pitch);
+
+  // Set the notes and indicators
+  notes.forEach((noteDetail, i) => {
+    let strippedNote = noteDetail.replace(/[^0-9-]/g, ''); // Remove all except numbers and '-'
+    document.getElementById(`note-input-${i}`).value = strippedNote;
+
+    const highIndicator1 = document.querySelector(`.indicator[data-position="high1"][data-note-index="${i}"]`);
+    const lowIndicator1 = document.querySelector(`.indicator[data-position="low1"][data-note-index="${i}"]`);
+    const highIndicator2 = document.querySelector(`.indicator[data-position="high2"][data-note-index="${i}"]`);
+    const lowIndicator2 = document.querySelector(`.indicator[data-position="low2"][data-note-index="${i}"]`);
+
+    highIndicator1.classList.remove('high');
+    lowIndicator1.classList.remove('low');
+    highIndicator2.classList.remove('high');
+    lowIndicator2.classList.remove('low');
+
+    if (noteDetail.startsWith('h')) highIndicator1.classList.add('high');
+    else if (noteDetail.startsWith('l')) lowIndicator1.classList.add('low');
+
+    if (noteDetail.endsWith('h')) highIndicator2.classList.add('high');
+    else if (noteDetail.endsWith('l')) lowIndicator2.classList.add('low');
+  });
+
+  // Update the xylophone to reflect the new tuning
+  updateXylophone();
+}
+
+  </script>
+</body>
+</html>
